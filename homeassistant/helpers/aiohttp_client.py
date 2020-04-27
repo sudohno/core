@@ -2,7 +2,7 @@
 import asyncio
 from ssl import SSLContext
 import sys
-from typing import Any, Awaitable, Callable, Optional, Union, cast
+from typing import Any, Awaitable, Optional, Union, cast
 
 import aiohttp
 from aiohttp import web
@@ -76,8 +76,15 @@ def async_create_clientsession(
     orig_session_close = clientsession.close
     clientsession.close = patched_close  # type: ignore
 
+    @callback
+    def _async_restore_close(event: Event) -> None:
+        """Restore session close method."""
+        clientsession.close = orig_session_close  # type: ignore
+
+    hass.bus.async_listen_once(EVENT_HOMEASSISTANT_CLOSE, _async_restore_close)
+
     if auto_cleanup:
-        _async_register_clientsession_shutdown(hass, clientsession, orig_session_close)
+        _async_register_clientsession_shutdown(hass, clientsession)
 
     return clientsession
 
@@ -147,9 +154,7 @@ async def async_aiohttp_proxy_stream(
 
 @callback
 def _async_register_clientsession_shutdown(
-    hass: HomeAssistantType,
-    clientsession: aiohttp.ClientSession,
-    orig_session_close: Callable,
+    hass: HomeAssistantType, clientsession: aiohttp.ClientSession
 ) -> None:
     """Register ClientSession close on Home Assistant shutdown.
 
@@ -159,7 +164,6 @@ def _async_register_clientsession_shutdown(
     @callback
     def _async_close_websession(event: Event) -> None:
         """Close websession."""
-        clientsession.close = orig_session_close  # type: ignore
         clientsession.detach()
 
     hass.bus.async_listen_once(EVENT_HOMEASSISTANT_CLOSE, _async_close_websession)
