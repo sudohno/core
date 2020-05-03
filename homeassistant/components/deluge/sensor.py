@@ -30,6 +30,8 @@ SENSOR_TYPES = {
     "current_status": ["Status", None],
     "download_speed": ["Down Speed", DATA_RATE_KILOBYTES_PER_SECOND],
     "upload_speed": ["Up Speed", DATA_RATE_KILOBYTES_PER_SECOND],
+    "upload_limit": ["Upload Limit", DATA_RATE_KILOBYTES_PER_SECOND],
+    "download_limit": ["Download Limit", DATA_RATE_KILOBYTES_PER_SECOND],
 }
 
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
@@ -80,6 +82,7 @@ class DelugeSensor(Entity):
         self._state = None
         self._unit_of_measurement = SENSOR_TYPES[sensor_type][1]
         self.data = None
+        self.configdata = None
         self._available = False
 
     @property
@@ -115,6 +118,9 @@ class DelugeSensor(Entity):
                     "dht_download_rate",
                 ],
             )
+            self.configdata = self.client.call(
+                "core.get_config_values", ["max_upload_speed", "max_download_speed",],
+            )
             self._available = True
         except FailedToReconnectException:
             _LOGGER.error("Connection to Deluge Daemon Lost")
@@ -146,3 +152,8 @@ class DelugeSensor(Entity):
                 kb_spd = float(upload)
                 kb_spd = kb_spd / 1024
                 self._state = round(kb_spd, 2 if kb_spd < 0.1 else 1)
+
+        if self.type == "upload_limit":
+            self._state = float(self.configdata[b"max_upload_speed"])
+        if self.type == "download_limit":
+            self._state = float(self.configdata[b"max_download_speed"])
